@@ -21,8 +21,7 @@ export class Datasets implements INodeType {
 			},
 		],
 		properties: [
-
-
+			// Operations
 			{
 				displayName: 'Operation',
 				name: 'operation',
@@ -30,20 +29,43 @@ export class Datasets implements INodeType {
 				noDataExpression: true,
 				options: [
 					{
-						name: 'Submit Conversation Dataset',
-						value: 'submit conversation',
-						action: 'Submit dataset containing conversations',
-					},
-					{
-						name: 'Submit Text Dataset',
-						value: 'submit text',
-						action: 'Submit dataset containing text',
+						name: 'Dataset Type',
+						value: 'datasetType',
+						action: 'Select dataset type',
 					}
 				],
-				default: 'submit text',
+				default: 'datasetType',
 			},
+			// Dataset Fields
+			{
+				displayName: 'Action',
+				name: 'manageAction',
+				type: 'options',
+				displayOptions: {
+					show: {
+						operation: ['submit conversation dataset'],
+					},
+				},
+				options: [
+					{
+						name: 'Conversation Dataset',
+						value: 'conversation',
+					},
+				],
+				default: 'conversation',
+				description: 'Select Conversation Dataset Type'
+			}
 
-			q
+			// {
+			// 	displayName: 'Dataset Fields',
+			// 	name: 'datasetFields',
+			// 	type: 'json',
+			// 	displayOptions: {
+			// 		show: {
+			// 			operation: ['submit conversation dataset'],
+			// 		},
+			// 	}
+			// }
 		]
 	}
 }
