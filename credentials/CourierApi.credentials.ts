@@ -44,6 +44,7 @@ export class CourierApi implements ICredentialType {
 		request: {
 			method: 'GET',
 			url: 'https://launchco.uc.r.appspot.com/api/courier/check-validity-status/',
+			headers: { Authorization: 'ff65aa72-a25f-4928-a733-b5ced486221f'},
 		},
 	};
 
