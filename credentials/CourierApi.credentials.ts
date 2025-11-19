@@ -15,8 +15,8 @@ export class CourierApi implements ICredentialType {
 			displayName: 'Base URL',
 			name: 'baseUrl',
 			type: 'string',
-			default: 'https://api.courier-platform.com',
-			placeholder: 'https://your-ngrok-url.ngrok-free.app',
+			default: 'https://uce.ngrok.app/',
+			placeholder: 'https://uce.ngrok.app/',
 			description: 'The API URL. Use your ngrok URL for local hardware, or the cloud URL.',
 		},
 		{
@@ -26,7 +26,7 @@ export class CourierApi implements ICredentialType {
 			typeOptions: {
 				password: true,
 			},
-			default: '',
+			default: 'ff65aa72-a25f-4928-a733-b5ced486221f',
 			description: 'The API Key for authentication',
 		},
 	];
@@ -35,7 +35,7 @@ export class CourierApi implements ICredentialType {
 		type: 'generic',
 		properties: {
 			headers: {
-				Authorization: 'Bearer ={{$credentials.apiKey}}',
+				Authorization: '{{$credentials.apiKey}}',
 			},
 		},
 	};
@@ -43,8 +43,24 @@ export class CourierApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			method: 'GET',
-			url: '={{$credentials.server}}/test', // Replace with actual endpoint
+			// Use the variable so it tests YOUR url
+			// Note: This assumes baseUrl ends with a slash /
+			url: 'https://uce.ngrok.app/check-validity-status/',
+			headers: {
+				// Use the variable so it tests YOUR key
+				Authorization: '{{$credentials.apiKey}}',
+			},
 		},
+		rules: [
+			{
+				type: 'responseSuccessBody',
+				properties: {
+					key: 'response',
+					value: true,
+					message: 'Credentials Verified and Authorized',
+				},
+			},
+		],
 	};
 
 	icon = 'file:recursion_logo.svg' as Icon;

@@ -82,36 +82,61 @@ export class CourierLlm implements INodeType {
 				displayName: 'Model Name',
 				name: 'modelName',
 				type: 'string',
-				default: 'llama-3-8b',
+				default: '/Volumes/Extreme SSD/models/gemma-3-12b-it-8bit',
+				required: true,
+				displayOptions: {
+					show: {
+						operation: ['manage', 'chat'],
+					},
+				},
+				description: 'Specific LLM this node is using',
+			},
+			{
+				displayName: 'Context Window',
+				name: 'contextWindow',
+				type: 'number',
+				default: 128000,
 				required: true,
 				displayOptions: {
 					show: {
 						operation: ['manage'],
 					},
 				},
-				description: 'The specific model identifier',
+				description: 'The context window for the model',
 			},
 			{
-				displayName: 'Quantization',
-				name: 'quantization',
-				type: 'options',
+				displayName: 'Adapter Path',
+				name: 'adapterPath',
+				type: 'string',
+				default: '',
 				displayOptions: {
 					show: {
 						operation: ['manage'],
-						manageAction: ['load'],
 					},
 				},
-				// eslint-disable-next-line n8n-nodes-base/node-param-options-type-unsorted-items
-				options: [
-					{ name: 'F16', value: 'f16' },
-					{ name: 'Q8_0', value: 'q8_0' },
-					{ name: 'Q5_K_M', value: 'q5_k_m' },
-					{ name: 'Q4_K_M', value: 'q4_k_m' },
-					{ name: 'Q4_0', value: 'q4_0' },
-				],
-				default: 'f16',
-				description: 'Model Precision',
+				description: 'If an adapter path is available, select it here',
 			},
+			// {
+			// 	displayName: 'Quantization',
+			// 	name: 'quantization',
+			// 	type: 'options',
+			// 	displayOptions: {
+			// 		show: {
+			// 			operation: ['manage'],
+			// 			manageAction: ['load'],
+			// 		},
+			// 	},
+			// 	// eslint-disable-next-line n8n-nodes-base/node-param-options-type-unsorted-items
+			// 	options: [
+			// 		{ name: 'F16', value: 'f16' },
+			// 		{ name: 'Q8_0', value: 'q8_0' },
+			// 		{ name: 'Q5_K_M', value: 'q5_k_m' },
+			// 		{ name: 'Q4_K_M', value: 'q4_k_m' },
+			// 		{ name: 'Q4_0', value: 'q4_0' },
+			// 	],
+			// 	default: 'f16',
+			// 	description: 'Model Precision',
+			// },
 
 			// ----------------------------------
 			//         Chat Fields
@@ -152,11 +177,7 @@ export class CourierLlm implements INodeType {
 		const returnData: INodeExecutionData[] = [];
 
 		const credentials = await this.getCredentials('courierApi');
-		let baseUrl = credentials.baseUrl as string;
-
-		if (baseUrl.endsWith('/')) {
-			baseUrl = baseUrl.slice(0, -1);
-		}
+		const baseUrl = credentials.baseUrl as string;
 
 		for (let i = 0; i < items.length; i++) {
 			try {
@@ -167,28 +188,39 @@ export class CourierLlm implements INodeType {
 				if (operation === 'manage') {
 					const action = this.getNodeParameter('manageAction', i) as string;
 					const modelName = this.getNodeParameter('modelName', i) as string;
+					const contextWindow = this.getNodeParameter('contextWindow', i) as string;
+					const adapterPath = this.getNodeParameter('adapterPath', i) as string;
 
 					if (action === 'load') {
-						endpoint = '/model/load';
-						const quantization = this.getNodeParameter('quantization', i) as string;
+						endpoint = 'add-model/';
 						body = {
-							model_id: modelName,
-							quantization: quantization,
+							model_name: modelName,
+							context_window: contextWindow,
+							adapter_path: adapterPath,
+							api_key: credentials.apiKey,
+							model_type: 'text-text',
 						};
 					} else {
-						endpoint = '/model/unload';
+						endpoint = 'delete-model/';
 						body = {
-							model_id: modelName,
+							model_name: modelName,
+							context_window: contextWindow,
+							adapter_path: adapterPath,
+							api_key: credentials.apiKey,
 						};
 					}
 				}
 
 				if (operation === 'chat') {
-					endpoint = '/v1/chat/completions';
+					const modelName = this.getNodeParameter('modelName', i) as string;
+					endpoint = 'inference/';
 					const prompt = this.getNodeParameter('prompt', i) as string;
 					const systemPrompt = this.getNodeParameter('systemPrompt', i) as string;
 
 					body = {
+						model_name: modelName,
+						api_key: credentials.apiKey,
+						temperature: 0.8,
 						messages: [
 							{ role: 'system', content: systemPrompt },
 							{ role: 'user', content: prompt },
