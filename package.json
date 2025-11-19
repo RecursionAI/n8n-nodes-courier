@@ -17,6 +17,7 @@
 	},
 	"scripts": {
 		"build": "n8n-node build",
+		"copy:files": "mkdir -p dist/nodes/Llm && cp nodes/Llm/recursion_logo.svg dist/nodes/Llm/recursion_logo.svg",
 		"build:watch": "tsc --watch",
 		"dev": "n8n-node dev",
 		"lint": "n8n-node lint",
@@ -31,11 +32,11 @@
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/CourierApi.credentials.js"
+			"dist/credentials/CourierApi.credentials.ts"
 		],
 		"nodes": [
 			"dist/nodes/Example/Example.node.js",
-			"dist/nodes/LLMNode/CourierLlm.node.ts"
+			"dist/nodes/LLM/CourierLlm.node.ts"
 		]
 	},
 	"devDependencies": {
@@ -46,6 +47,7 @@
 		"typescript": "5.9.2"
 	},
 	"peerDependencies": {
-		"n8n-workflow": "*"
+		"n8n-workflow": "*",
+		"typescript": "*"
 	}
 }
