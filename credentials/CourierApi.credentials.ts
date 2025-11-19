@@ -44,8 +44,18 @@ export class CourierApi implements ICredentialType {
 		request: {
 			method: 'GET',
 			url: 'https://launchco.uc.r.appspot.com/api/courier/check-validity-status/',
-			headers: { Authorization: 'ff65aa72-a25f-4928-a733-b5ced486221f'},
+			headers: { Authorization: 'ff65aa72-a25f-4928-a733-b5ced486221f' },
 		},
+		rules: [
+			{
+				type: 'responseSuccessBody',
+				properties: {
+					key: 'response',
+					value: true,
+					message: 'Credentials Verified and Authorized',
+				},
+			},
+		],
 	};
 
 	icon = 'file:recursion_logo.svg' as Icon;
