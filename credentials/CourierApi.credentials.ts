@@ -3,6 +3,7 @@ import {
 	ICredentialTestRequest,
 	ICredentialType,
 	INodeProperties,
+	Icon,
 } from 'n8n-workflow';
 
 export class CourierApi implements ICredentialType {
@@ -46,5 +47,5 @@ export class CourierApi implements ICredentialType {
 		},
 	};
 
-	icon = "file:./icon.svg";
+	icon = 'file:recursion_logo.svg' as Icon;
 }

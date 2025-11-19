@@ -35,8 +35,7 @@
 		],
 		"nodes": [
 			"dist/nodes/Example/Example.node.js",
-			"dist/nodes/LLMNode/CourierLlm.node.ts",
-			"dist/nodes/LLMNode/CourierModel.node.ts"
+			"dist/nodes/LLMNode/CourierLlm.node.ts"
 		]
 	},
 	"devDependencies": {
