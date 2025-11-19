@@ -86,7 +86,7 @@ export class CourierLlm implements INodeType {
 				required: true,
 				displayOptions: {
 					show: {
-						operation: ['manage'],
+						operation: ['manage', 'chat'],
 					},
 				},
 				description: 'Specific LLM this node is using',

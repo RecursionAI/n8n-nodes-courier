@@ -43,8 +43,13 @@ export class CourierApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			method: 'GET',
-			url: 'https://launchco.uc.r.appspot.com/api/courier/check-validity-status/',
-			headers: { Authorization: 'ff65aa72-a25f-4928-a733-b5ced486221f' },
+			// Use the variable so it tests YOUR url
+			// Note: This assumes baseUrl ends with a slash /
+			url: '{{$credentials.baseUrl}}check-validity-status/',
+			headers: {
+				// Use the variable so it tests YOUR key
+				Authorization: '{{$credentials.apiKey}}',
+			},
 		},
 		rules: [
 			{
