@@ -181,7 +181,7 @@ export class CourierLoraConfig implements INodeType {
 							typeOptions: {
 							numberPrecision:10,
 							},
-					default:0,
+								default:0,
 							},
 							{
 							displayName: 'Train Target (train)',
@@ -228,11 +228,11 @@ export class CourierLoraConfig implements INodeType {
 							typeOptions: {
 							numberPrecision:6,
 							},
-default: -1, // use -1 to mean "no override"
-},
-],
-},
-],
+								default: -1, // use -1 to mean "no override"
+							},
+						],
+					},
+				],
 description:
 	'Only non-empty / non-zero values are applied on top of the base configuration',
 },
