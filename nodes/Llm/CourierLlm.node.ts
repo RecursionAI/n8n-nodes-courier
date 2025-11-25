@@ -7,6 +7,7 @@ import {
 	INodeTypeDescription,
 	ILoadOptionsFunctions,
 	INodePropertyOptions,
+	NodeOperationError,
 } from 'n8n-workflow';
 
 export class CourierLlm implements INodeType {
@@ -179,7 +180,12 @@ export class CourierLlm implements INodeType {
 						try {
 							messages = JSON.parse(messagesRaw) as IDataObject[];
 						} catch (e) {
-							throw new Error('Messages input must be a valid JSON array.');
+							// noinspection ExceptionCaughtLocallyJS
+							throw new NodeOperationError(
+								this.getNode(),
+								'Messages input must be a valid JSON array. ' + e.string,
+								{ itemIndex: i },
+							);
 						}
 					}
 				} else {
@@ -191,19 +197,19 @@ export class CourierLlm implements INodeType {
 						messages.push({ role: 'system', content: systemPrompt });
 					}
 
-					const isVisionModel = modelData['type'] === 'image-text-text';
+					// const isVisionModel = modelData['type'] === 'image-text-text';
 
-					if (isVisionModel && hasImages) {
-						messages.push({
-							role: 'user',
-							content: {
-								image_bytes: images,
-								text: prompt,
-							},
-						});
-					} else {
-						messages.push({ role: 'user', content: prompt });
-					}
+					// if (isVisionModel) {
+					// 	messages.push({
+					// 		role: 'user',
+					// 		content: {
+					// 			image_bytes: images,
+					// 			text: prompt,
+					// 		},
+					// 	});
+					// } else {
+					messages.push({ role: 'user', content: prompt });
+					// }
 				}
 
 				const body: IDataObject = {
@@ -218,12 +224,12 @@ export class CourierLlm implements INodeType {
 
 				// Logic to handle Vision Models
 				// Instead of modifying messages, we add 'image_bytes' to the root body
-				const isVisionModel = modelData['type'] === 'image-text-text';
-				const hasImages = images.length > 0;
+				// const isVisionModel = modelData['type'] === 'image-text-text';
+				// const hasImages = images.length > 0;
 
-				if (isVisionModel && hasImages) {
-					body.image_bytes = images;
-				}
+				// if (isVisionModel && hasImages) {
+				// 	body.image_bytes = images;
+				// }
 
 				const options: IHttpRequestOptions = {
 					method: 'POST',
