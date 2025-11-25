@@ -47,10 +47,33 @@ export class CourierLlm implements INodeType {
 			//         Chat Fields
 			// ----------------------------------
 			{
+				displayName: 'Input Type',
+				name: 'promptType',
+				type: 'options',
+				options: [
+					{
+						name: 'Text Prompt',
+						value: 'text',
+					},
+					{
+						name: 'Chat Messages (JSON)',
+						value: 'messages',
+					},
+				],
+				default: 'text',
+				description:
+					'Choose whether to provide a simple text prompt or a full list of messages (e.g. from a chat widget)',
+			},
+			{
 				displayName: 'System Prompt',
 				name: 'systemPrompt',
 				type: 'string',
 				default: 'You are a helpful assistant.',
+				displayOptions: {
+					show: {
+						promptType: ['text'],
+					},
+				},
 			},
 			{
 				displayName: 'Prompt',
@@ -61,7 +84,25 @@ export class CourierLlm implements INodeType {
 				},
 				default: '',
 				required: true,
+				displayOptions: {
+					show: {
+						promptType: ['text'],
+					},
+				},
 				description: 'The input text for the LLM',
+			},
+			{
+				displayName: 'Messages (JSON)',
+				name: 'messages',
+				type: 'json',
+				default: '',
+				required: true,
+				displayOptions: {
+					show: {
+						promptType: ['messages'],
+					},
+				},
+				description: 'JSON array of messages (e.g. [{ "role": "user", "content": "hello" }])',
 			},
 		],
 	};
@@ -70,6 +111,7 @@ export class CourierLlm implements INodeType {
 		loadOptions: {
 			async getModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				const credentials = await this.getCredentials('courierApi');
+
 				let baseUrl = credentials.baseUrl as string;
 				if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
 
@@ -92,6 +134,7 @@ export class CourierLlm implements INodeType {
 						value: JSON.stringify({
 							name: item.model_name,
 							id: item.model_id,
+							type: item.model_type,
 						}),
 					});
 				}
@@ -113,30 +156,74 @@ export class CourierLlm implements INodeType {
 		for (let i = 0; i < items.length; i++) {
 			try {
 				const modelDataString = this.getNodeParameter('model', i) as string;
-				let modelData;
+				let modelData: IDataObject;
 				try {
-					modelData = JSON.parse(modelDataString);
+					modelData = JSON.parse(modelDataString) as IDataObject;
 					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 				} catch (e) {
 					// Fallback if user entered a manual string expression that isn't JSON
-					modelData = { name: modelDataString, id: null };
+					modelData = { name: modelDataString, id: null, type: 'text-text' };
 				}
 
 				const endpoint = '/inference/';
-				const prompt = this.getNodeParameter('prompt', i) as string;
-				const systemPrompt = this.getNodeParameter('systemPrompt', i) as string;
+				const promptType = this.getNodeParameter('promptType', i) as string;
+
+				let messages: IDataObject[] = [];
+
+				if (promptType === 'messages') {
+					// Mode: Chat Messages (JSON)
+					const messagesRaw = this.getNodeParameter('messages', i, []) as unknown;
+					if (Array.isArray(messagesRaw)) {
+						messages = messagesRaw as IDataObject[];
+					} else if (typeof messagesRaw === 'string') {
+						try {
+							messages = JSON.parse(messagesRaw) as IDataObject[];
+						} catch (e) {
+							throw new Error('Messages input must be a valid JSON array.');
+						}
+					}
+				} else {
+					// Mode: Text Prompt
+					const prompt = this.getNodeParameter('prompt', i) as string;
+					const systemPrompt = this.getNodeParameter('systemPrompt', i) as string;
+
+					if (systemPrompt) {
+						messages.push({ role: 'system', content: systemPrompt });
+					}
+
+					const isVisionModel = modelData['type'] === 'image-text-text';
+
+					if (isVisionModel && hasImages) {
+						messages.push({
+							role: 'user',
+							content: {
+								image_bytes: images,
+								text: prompt,
+							},
+						});
+					} else {
+						messages.push({ role: 'user', content: prompt });
+					}
+				}
 
 				const body: IDataObject = {
 					model_name: modelData.name,
 					model_id: modelData.id,
+					model_type: modelData['type'],
 					api_key: credentials.apiKey,
 					temperature: 0.8,
-					messages: [
-						{ role: 'system', content: systemPrompt },
-						{ role: 'user', content: prompt },
-					],
+					messages: messages, // Standard text messages
 					stream: true,
 				};
+
+				// Logic to handle Vision Models
+				// Instead of modifying messages, we add 'image_bytes' to the root body
+				const isVisionModel = modelData['type'] === 'image-text-text';
+				const hasImages = images.length > 0;
+
+				if (isVisionModel && hasImages) {
+					body.image_bytes = images;
+				}
 
 				const options: IHttpRequestOptions = {
 					method: 'POST',
