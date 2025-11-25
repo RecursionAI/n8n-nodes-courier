@@ -1,16 +1,20 @@
 {
 	"name": "n8n-nodes-courier",
 	"version": "0.1.0",
-	"description": "",
+	"description": "This package contains custom nodes for n8n.io to interact with the Courier Platform made by RecursionAI.",
 	"license": "MIT",
 	"homepage": "",
 	"keywords": [
 		"n8n-community-node-package"
 	],
-	"author": "Ryker Ross <ryker@thinkrecursion.ai> (https://thinkrecursion.ai)",
+	"author": {
+      "name": "Ryker Ross",
+      "email": "ryker@thinkrecursion.ai",
+      "url": "https://thinkrecursion.ai"
+    },
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/<...>/n8n-nodes-<...>.git"
+		"url": "https://github.com/RecursionAI/n8n-nodes-courier"
 	},
 	"scripts": {
 		"build": "n8n-node build",
