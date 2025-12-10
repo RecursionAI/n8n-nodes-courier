@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-courier",
-	"version": "2.0.0",
+	"version": "1.0.0",
 	"description": "This package contains custom nodes for n8n.io to interact with the Courier Platform made by RecursionAI.",
 	"license": "MIT",
 	"homepage": "",
