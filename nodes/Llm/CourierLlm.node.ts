@@ -37,7 +37,7 @@ export class CourierLlm implements INodeType {
 				name: 'model',
 				type: 'options',
 				typeOptions: {
-					loadOptionsMethod: 'getModels',
+					loadOptionsMethod: 'getWorkbenchModels',
 				},
 				default: '',
 				required: true,
@@ -110,7 +110,7 @@ export class CourierLlm implements INodeType {
 
 	methods = {
 		loadOptions: {
-			async getModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+			async getWorkbenchModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				const credentials = await this.getCredentials('courierApi');
 
 				let baseUrl = credentials.baseUrl as string;
@@ -121,7 +121,7 @@ export class CourierLlm implements INodeType {
 					'courierApi',
 					{
 						method: 'GET',
-						url: `${baseUrl}/get-courier-models-for-user/`,
+						url: `${baseUrl}/get-workbench-models/`,
 						json: true,
 					},
 				);
@@ -131,11 +131,12 @@ export class CourierLlm implements INodeType {
 
 				for (const item of items) {
 					returnData.push({
-						name: `${item.model_name} (Context: ${item.context_window})`,
+						name: `${item.nickname || item.name} (${item.context_window} | ${item.api_type})`,
 						value: JSON.stringify({
-							name: item.model_name,
+							name: item.name,
 							id: item.model_id,
 							type: item.model_type,
+							api_type: item.api_type,
 						}),
 					});
 				}

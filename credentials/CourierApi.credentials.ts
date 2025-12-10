@@ -43,24 +43,11 @@ export class CourierApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			method: 'GET',
-			// Use the variable so it tests YOUR url
-			// Note: This assumes baseUrl ends with a slash /
-			url: 'https://uce.ngrok.app/check-validity-status/',
+			url: '={{$credentials.baseUrl}}check-validity-status/',
 			headers: {
-				// Use the variable so it tests YOUR key
 				Authorization: '={{$credentials.apiKey}}',
 			},
 		},
-		rules: [
-			{
-				type: 'responseSuccessBody',
-				properties: {
-					key: 'response',
-					value: true,
-					message: 'Credentials Verified and Authorized',
-				},
-			},
-		],
 	};
 
 	icon = 'file:recursion_logo.svg' as Icon;
