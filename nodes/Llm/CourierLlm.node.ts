@@ -12,14 +12,14 @@ import {
 
 export class CourierLlm implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Courier LLM',
-		name: 'courierLlm',
-		icon: 'file:recursion_logo.svg',
+		displayName: 'Courier',
+		name: 'courier',
+		icon: 'file:courier_logo.svg',
 		group: ['transform'],
 		version: 1,
 		description: 'Interact with Courier Local or Cloud APIs',
 		defaults: {
-			name: 'Courier LLM',
+			name: 'Courier',
 		},
 		// Fix 3: Declare that this node can be used by AI Agents
 		usableAsTool: true,
@@ -237,6 +237,10 @@ export class CourierLlm implements INodeType {
 					url: `${baseUrl}${endpoint}`,
 					body: body,
 					json: true,
+					headers: {
+						'Content-Type': 'application/json',
+						'Authorization': `${credentials.apiKey}`,
+					},
 				};
 
 				const response = await this.helpers.httpRequestWithAuthentication.call(
