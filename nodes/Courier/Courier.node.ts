@@ -10,7 +10,7 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 
-export class CourierLlm implements INodeType {
+export class Courier implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Courier',
 		name: 'courier',
@@ -149,7 +149,7 @@ export class CourierLlm implements INodeType {
 					{
 						method: 'GET',
 						url: endpoint,
-						json: true,
+						json: apiProvider !== 'openai',
 					},
 				);
 
@@ -189,6 +189,7 @@ export class CourierLlm implements INodeType {
 	};
 
 	// Fix 1: IExecuteFunctions is now imported from n8n-workflow
+
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		const items = this.getInputData();
 		const returnData: INodeExecutionData[] = [];
@@ -208,6 +209,71 @@ export class CourierLlm implements INodeType {
 					// Fallback if user entered a manual string expression that isn't JSON
 					modelData = { name: modelDataString, id: null, type: 'text-text' };
 				}
+
+				// Inline streaming parser function
+				const parseOpenAIStreamingResponse = (responseText: string): IDataObject => {
+					let completeResponse = '';
+					let modelName = '';
+					let usageData = {};
+					let promptTokens = 0;
+					let generationTokens = 0;
+					let peakMemory = 0;
+
+					// Split response into lines and process each chunk
+					const lines = responseText.split('\n');
+					for (const line of lines) {
+						const trimmedLine = line.trim();
+						if (trimmedLine.startsWith('data: ')) {
+							const chunkData = trimmedLine.substring(6).trim();
+							if (chunkData === '[DONE]') {
+								break; // Streaming complete
+							}
+
+							try {
+								const parsedChunk = JSON.parse(chunkData);
+
+								// Extract metadata from any chunk that has it
+								if (parsedChunk.model) modelName = parsedChunk.model;
+								if (parsedChunk.usage) usageData = parsedChunk.usage;
+								if (parsedChunk.prompt_tokens) promptTokens = parsedChunk.prompt_tokens;
+								if (parsedChunk.generation_tokens) generationTokens = parsedChunk.generation_tokens;
+								if (parsedChunk.peak_memory) peakMemory = parsedChunk.peak_memory;
+
+								// Handle content chunks
+								if (parsedChunk.choices && parsedChunk.choices.length > 0) {
+									const choice = parsedChunk.choices[0];
+
+									// Handle delta chunks (streaming)
+									if (choice.delta && choice.delta.content) {
+										completeResponse += choice.delta.content;
+									}
+
+									// Handle final complete message (if present)
+									if (choice.message && choice.message.content) {
+										completeResponse = choice.message.content;
+									}
+								}
+							} catch {
+								// Log error using n8n's console (if available)
+								// if (this.helpers && this.helpers.) {
+								// 	this.helpers.log('Error parsing OpenAI streaming chunk:', e);
+								// }
+								// Continue processing other chunks
+							}
+						}
+					}
+
+					// Return normalized response format
+					return {
+						content: completeResponse,
+						output: completeResponse,
+						model: modelName,
+						usage: usageData,
+						prompt_tokens: promptTokens,
+						generation_tokens: generationTokens,
+						peak_memory: peakMemory,
+					};
+				};
 
 				const apiProvider = this.getNodeParameter('apiProvider', i) as string || 'courier';
 				const promptType = this.getNodeParameter('promptType', i) as string;
@@ -258,10 +324,6 @@ export class CourierLlm implements INodeType {
 				// Determine endpoint and request format based on API provider
 				let endpoint = '';
 				let requestBody: IDataObject;
-				let headers: IDataObject = {
-					'Content-Type': 'application/json',
-					'Authorization': `Bearer ${credentials.apiKey}`,
-				};
 
 				if (apiProvider === 'openai') {
 					endpoint = `${baseUrl}/v1/chat/completions`;
@@ -272,6 +334,7 @@ export class CourierLlm implements INodeType {
 						messages: messages,
 						temperature: 0.8,
 						stream: true,
+
 					};
 				} else {
 					endpoint = `${baseUrl}/inference/`;
@@ -281,12 +344,13 @@ export class CourierLlm implements INodeType {
 						model_name: modelData.name,
 						model_id: modelData.id,
 						model_type: modelData['type'],
-						api_key: credentials.apiKey,
 						temperature: 0.8,
 						messages: messages,
-						stream: true,
+						stream: false,
 					};
 				}
+
+
 
 				// Logic to handle Vision Models
 				// Instead of modifying messages, we add 'image_bytes' to the root body
@@ -302,8 +366,16 @@ export class CourierLlm implements INodeType {
 					url: endpoint,
 					body: requestBody,
 					json: true,
-					headers: headers,
 				};
+
+				// For OpenAI API, we need to override the Authorization header format
+				// Courier API uses credential system's raw API_KEY format (which is correct)
+				if (apiProvider === 'openai') {
+					options.headers = {
+						'Content-Type': 'application/json',
+						'Authorization': `Bearer ${credentials.apiKey}`,
+					};
+				}
 
 				const response = await this.helpers.httpRequestWithAuthentication.call(
 					this,
@@ -311,35 +383,24 @@ export class CourierLlm implements INodeType {
 					options,
 				);
 
-				// Handle response based on API provider
-				if (apiProvider === 'openai') {
-					// For OpenAI, we need to handle the response differently
-					const responseData = response as IDataObject;
-
-					// Extract the content from OpenAI response format
-					if (responseData.choices && Array.isArray(responseData.choices) && responseData.choices.length > 0) {
-						const choices = responseData.choices as IDataObject[];
-						const firstChoice = choices[0] as IDataObject;
-						const message = firstChoice.message as IDataObject || {};
-						const content = message.content || '';
-						const result: IDataObject = {
-							content: content,
-							output: content,
-							model: responseData.model,
-							usage: responseData.usage,
-						};
-
-						returnData.push({
-							json: result,
-						});
-					} else {
-						throw new NodeOperationError(
-							this.getNode(),
-							'Invalid OpenAI API response format',
-							{ itemIndex: i },
-						);
-					}
-				} else {
+						// Handle response based on API provider
+						if (apiProvider === 'openai') {
+							// Handle streaming response
+							const responseText = typeof response === 'string' ? response : JSON.stringify(response);
+							try {
+								const parsedResult = parseOpenAIStreamingResponse(responseText);
+								returnData.push({
+									json: parsedResult,
+								});
+							} catch (parseError) {
+								// console.error('Failed to parse OpenAI streaming response:', parseError);
+								throw new NodeOperationError(
+									this.getNode(),
+									'Failed to parse OpenAI streaming response: ' + parseError.message,
+									{ itemIndex: i },
+								);
+							}
+						} else {
 					// Courier API response handling (existing behavior)
 					const responseData = response as IDataObject;
 					const result: IDataObject = { ...responseData };
