@@ -33,6 +33,25 @@ export class CourierLlm implements INodeType {
 		],
 		properties: [
 			{
+				displayName: 'API Provider',
+				name: 'apiProvider',
+				type: 'options',
+				options: [
+					{
+						name: 'Courier API (Default)',
+						value: 'courier',
+						description: 'Use Courier inference API'
+					},
+					{
+						name: 'OpenAI Compatible API',
+						value: 'openai',
+						description: 'Use OpenAI compatible endpoints'
+					}
+				],
+				default: 'courier',
+				description: 'Choose which API provider to use'
+			},
+			{
 				displayName: 'Model Name or ID',
 				name: 'model',
 				type: 'options',
@@ -112,33 +131,56 @@ export class CourierLlm implements INodeType {
 		loadOptions: {
 			async getWorkbenchModels(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
 				const credentials = await this.getCredentials('courierApi');
+				const apiProvider = this.getNodeParameter('apiProvider', 0) as string || 'courier';
 
 				let baseUrl = credentials.baseUrl as string;
 				if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+
+				let endpoint = '';
+				if (apiProvider === 'openai') {
+					endpoint = `${baseUrl}/v1/models`;
+				} else {
+					endpoint = `${baseUrl}/get-workbench-models/`;
+				}
 
 				const responseData = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'courierApi',
 					{
 						method: 'GET',
-						url: `${baseUrl}/get-workbench-models/`,
+						url: endpoint,
 						json: true,
 					},
 				);
 
-				const items = (responseData.models as IDataObject[]) || [];
+				const items = apiProvider === 'openai'
+					? responseData.data || []
+					: (responseData.models as IDataObject[]) || [];
+
 				const returnData: INodePropertyOptions[] = [];
 
 				for (const item of items) {
-					returnData.push({
-						name: `${item.nickname || item.name} (${item.context_window} | ${item.api_type})`,
-						value: JSON.stringify({
-							name: item.name,
-							id: item.model_id,
-							type: item.model_type,
-							api_type: item.api_type,
-						}),
-					});
+					if (apiProvider === 'openai') {
+						returnData.push({
+							name: `${item.id} (OpenAI)`,
+							value: JSON.stringify({
+								name: item.id,
+								id: item.id,
+								type: 'text-text',
+								api_type: 'openai'
+							}),
+						});
+					} else {
+						returnData.push({
+							name: `${item.nickname || item.name} (${item.context_window} | ${item.api_type})`,
+							value: JSON.stringify({
+								name: item.name,
+								id: item.model_id,
+								type: item.model_type,
+								api_type: item.api_type,
+							}),
+						});
+					}
 				}
 
 				return returnData;
@@ -167,7 +209,7 @@ export class CourierLlm implements INodeType {
 					modelData = { name: modelDataString, id: null, type: 'text-text' };
 				}
 
-				const endpoint = '/inference/';
+				const apiProvider = this.getNodeParameter('apiProvider', i) as string || 'courier';
 				const promptType = this.getNodeParameter('promptType', i) as string;
 
 				let messages: IDataObject[] = [];
@@ -213,15 +255,38 @@ export class CourierLlm implements INodeType {
 					// }
 				}
 
-				const body: IDataObject = {
-					model_name: modelData.name,
-					model_id: modelData.id,
-					model_type: modelData['type'],
-					api_key: credentials.apiKey,
-					temperature: 0.8,
-					messages: messages, // Standard text messages
-					stream: true,
+				// Determine endpoint and request format based on API provider
+				let endpoint = '';
+				let requestBody: IDataObject;
+				let headers: IDataObject = {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${credentials.apiKey}`,
 				};
+
+				if (apiProvider === 'openai') {
+					endpoint = `${baseUrl}/v1/chat/completions`;
+
+					// OpenAI format
+					requestBody = {
+						model: modelData.name,
+						messages: messages,
+						temperature: 0.8,
+						stream: true,
+					};
+				} else {
+					endpoint = `${baseUrl}/inference/`;
+
+					// Courier format (current)
+					requestBody = {
+						model_name: modelData.name,
+						model_id: modelData.id,
+						model_type: modelData['type'],
+						api_key: credentials.apiKey,
+						temperature: 0.8,
+						messages: messages,
+						stream: true,
+					};
+				}
 
 				// Logic to handle Vision Models
 				// Instead of modifying messages, we add 'image_bytes' to the root body
@@ -234,9 +299,10 @@ export class CourierLlm implements INodeType {
 
 				const options: IHttpRequestOptions = {
 					method: 'POST',
-					url: `${baseUrl}${endpoint}`,
-					body: body,
+					url: endpoint,
+					body: requestBody,
 					json: true,
+					headers: headers,
 				};
 
 				const response = await this.helpers.httpRequestWithAuthentication.call(
@@ -245,17 +311,48 @@ export class CourierLlm implements INodeType {
 					options,
 				);
 
-				const responseData = response as IDataObject;
-				const result: IDataObject = { ...responseData };
+				// Handle response based on API provider
+				if (apiProvider === 'openai') {
+					// For OpenAI, we need to handle the response differently
+					const responseData = response as IDataObject;
+					
+					// Extract the content from OpenAI response format
+					if (responseData.choices && Array.isArray(responseData.choices) && responseData.choices.length > 0) {
+						const choices = responseData.choices as IDataObject[];
+						const firstChoice = choices[0] as IDataObject;
+						const message = firstChoice.message as IDataObject || {};
+						const content = message.content || '';
+						const result: IDataObject = {
+							content: content,
+							output: content,
+							model: responseData.model,
+							usage: responseData.usage,
+						};
+						
+						returnData.push({
+							json: result,
+						});
+					} else {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Invalid OpenAI API response format',
+							{ itemIndex: i },
+						);
+					}
+				} else {
+					// Courier API response handling (existing behavior)
+					const responseData = response as IDataObject;
+					const result: IDataObject = { ...responseData };
 
-				// Map 'content' to 'output' to make it compatible with standard n8n chat handling
-				if (responseData.content) {
-					result.output = responseData.content;
+					// Map 'content' to 'output' to make it compatible with standard n8n chat handling
+					if (responseData.content) {
+						result.output = responseData.content;
+					}
+
+					returnData.push({
+						json: result,
+					});
 				}
-
-				returnData.push({
-					json: result,
-				});
 			} catch (error) {
 				if (this.continueOnFail()) {
 					const errorMessage = (error as Error).message;
