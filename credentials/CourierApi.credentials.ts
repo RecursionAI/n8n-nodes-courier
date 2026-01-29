@@ -50,5 +50,5 @@ export class CourierApi implements ICredentialType {
 		},
 	};
 
-	icon = 'file:recursion_logo.svg' as Icon;
+	icon = 'file:courier_logo.svg' as Icon;
 }
