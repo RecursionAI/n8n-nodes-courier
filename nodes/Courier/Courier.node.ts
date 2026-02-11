@@ -141,7 +141,6 @@ export class Courier implements INodeType {
 				name: 'jsonSchema',
 				type: 'json',
 				default: '{}',
-				required: false,
 				description: 'Optional JSON schema to enforce structured output. Use simple format like {"prop1": "string", "prop2": "number"} or full JSON Schema format. Leave as {} for unconstrained output.',
 			},
 		],
@@ -263,7 +262,7 @@ export class Courier implements INodeType {
 				}
 
 				// Helper function to transform simple JSON schema to proper JSON Schema format
-				const transformSimpleSchema = (simpleSchema: any): any => {
+				const transformSimpleSchema = (simpleSchema: IDataObject): IDataObject | null => {
 					if (!simpleSchema || typeof simpleSchema !== 'object') {
 						return null;
 					}
@@ -274,7 +273,7 @@ export class Courier implements INodeType {
 					}
 
 					// Transform simple format {"prop1": "string", "prop2": "number"} to proper JSON Schema
-					const properties: Record<string, any> = {};
+					const properties: Record<string, IDataObject> = {};
 					const required: string[] = [];
 
 					for (const [key, value] of Object.entries(simpleSchema)) {
@@ -299,8 +298,9 @@ export class Courier implements INodeType {
 							}
 						} else if (typeof value === 'object' && value !== null) {
 							// Already in proper format
-							properties[key] = value;
-							if (value.hasOwnProperty && !value.hasOwnProperty('required') || (value as any).required !== false) {
+							const valueObj = value as IDataObject;
+							properties[key] = valueObj;
+							if (!Object.prototype.hasOwnProperty.call(valueObj, 'required') || valueObj.required !== false) {
 								required.push(key);
 							}
 						}
@@ -328,17 +328,18 @@ export class Courier implements INodeType {
 
 				// Extract JSON schema parameter if provided
 				const jsonSchemaRaw = this.getNodeParameter('jsonSchema', i) as string;
-				let jsonSchema: any = null;
+				let jsonSchema: IDataObject | null = null;
 
 				// Only process if not empty and not just an empty object
-				if (jsonSchemaRaw && typeof jsonSchemaRaw === 'string' && jsonSchemaRaw.trim() !== '' && jsonSchemaRaw.trim() !== '{}') {
+				if (jsonSchemaRaw && jsonSchemaRaw.trim() !== '' && jsonSchemaRaw.trim() !== '{}') {
 					try {
-						const parsedSchema = JSON.parse(jsonSchemaRaw);
+						const parsedSchema = JSON.parse(jsonSchemaRaw) as IDataObject;
 						jsonSchema = transformSimpleSchema(parsedSchema);
+						// eslint-disable-next-line @typescript-eslint/no-unused-vars
 					} catch (e) {
 						// If parsing fails, try to use it as-is (might already be an object)
 						if (typeof jsonSchemaRaw === 'object') {
-							jsonSchema = transformSimpleSchema(jsonSchemaRaw);
+							jsonSchema = transformSimpleSchema(jsonSchemaRaw as unknown as IDataObject);
 						} else {
 							// Invalid JSON schema, ignore it
 							jsonSchema = null;
@@ -346,7 +347,7 @@ export class Courier implements INodeType {
 					}
 				} else if (typeof jsonSchemaRaw === 'object') {
 					// Handle case where it's already an object (shouldn't happen with our UI, but be safe)
-					jsonSchema = transformSimpleSchema(jsonSchemaRaw);
+					jsonSchema = transformSimpleSchema(jsonSchemaRaw as unknown as IDataObject);
 				}
 
 				if (promptType === 'messages') {
