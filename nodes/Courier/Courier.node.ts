@@ -124,6 +124,26 @@ export class Courier implements INodeType {
 				},
 				description: 'JSON array of messages (e.g. [{ "role": "user", "content": "hello" }])',
 			},
+			{
+				displayName: 'Temperature',
+				name: 'temperature',
+				type: 'number',
+				default: 0.2,
+				description: 'Controls randomness in model output. Lower values make output more deterministic.',
+				typeOptions: {
+					minValue: 0,
+					maxValue: 2,
+					step: 0.1
+				}
+			},
+			{
+				displayName: 'JSON Schema (Optional)',
+				name: 'jsonSchema',
+				type: 'json',
+				default: '{}',
+				required: false,
+				description: 'Optional JSON schema to enforce structured output. Use simple format like {"prop1": "string", "prop2": "number"} or full JSON Schema format. Leave as {} for unconstrained output.',
+			},
 		],
 	};
 
@@ -207,78 +227,127 @@ export class Courier implements INodeType {
 					// eslint-disable-next-line @typescript-eslint/no-unused-vars
 				} catch (e) {
 					// Fallback if user entered a manual string expression that isn't JSON
-					modelData = { name: modelDataString, id: null, type: 'text-text' };
+					// Try to handle different model data formats
+					let modelName = modelDataString;
+					let modelId = null;
+					let modelType = 'text-text';
+
+					// Check if it might be a UUID (36 characters with dashes)
+					if (modelDataString.length === 36 && modelDataString.includes('-')) {
+						// Could be a UUID - try to find a model name pattern
+						modelId = modelDataString;
+						modelName = 'Unknown Model';
+					} else if (modelDataString.includes('|')) {
+						// Might be in format "Model Name | Context Window | API Type"
+						const parts = modelDataString.split('|');
+						modelName = parts[0].trim();
+						if (parts.length > 2) {
+							modelType = parts[2].trim().toLowerCase() === 'image' ? 'image-text-text' : 'text-text';
+						}
+					}
+
+					modelData = { 
+						name: modelName, 
+						id: modelId, 
+						type: modelType
+					};
+
+					// Validate that we have required model data
+					if (!modelData.name || (typeof modelData.name === 'string' && modelData.name.trim() === '')) {
+						throw new NodeOperationError(
+							this.getNode(),
+							'Model name is required',
+							{ itemIndex: i },
+						);
+					}
 				}
 
-				// Inline streaming parser function
-				const parseOpenAIStreamingResponse = (responseText: string): IDataObject => {
-					let completeResponse = '';
-					let modelName = '';
-					let usageData = {};
-					let promptTokens = 0;
-					let generationTokens = 0;
-					let peakMemory = 0;
+				// Helper function to transform simple JSON schema to proper JSON Schema format
+				const transformSimpleSchema = (simpleSchema: any): any => {
+					if (!simpleSchema || typeof simpleSchema !== 'object') {
+						return null;
+					}
 
-					// Split response into lines and process each chunk
-					const lines = responseText.split('\n');
-					for (const line of lines) {
-						const trimmedLine = line.trim();
-						if (trimmedLine.startsWith('data: ')) {
-							const chunkData = trimmedLine.substring(6).trim();
-							if (chunkData === '[DONE]') {
-								break; // Streaming complete
+					// If it already looks like a proper JSON Schema (has 'type', 'properties', etc.)
+					if (simpleSchema.type === 'object' && simpleSchema.properties) {
+						return simpleSchema;
+					}
+
+					// Transform simple format {"prop1": "string", "prop2": "number"} to proper JSON Schema
+					const properties: Record<string, any> = {};
+					const required: string[] = [];
+
+					for (const [key, value] of Object.entries(simpleSchema)) {
+						if (typeof value === 'string') {
+							// Simple type mapping
+							const typeMap: Record<string, string> = {
+								'string': 'string',
+								'number': 'number',
+								'integer': 'integer',
+								'boolean': 'boolean',
+								'array': 'array',
+								'object': 'object',
+							};
+							
+							if (typeMap[value]) {
+								properties[key] = { type: typeMap[value] };
+								required.push(key);
+							} else {
+								// Assume it's a string if unknown type
+								properties[key] = { type: 'string' };
+								required.push(key);
 							}
-
-							try {
-								const parsedChunk = JSON.parse(chunkData);
-
-								// Extract metadata from any chunk that has it
-								if (parsedChunk.model) modelName = parsedChunk.model;
-								if (parsedChunk.usage) usageData = parsedChunk.usage;
-								if (parsedChunk.prompt_tokens) promptTokens = parsedChunk.prompt_tokens;
-								if (parsedChunk.generation_tokens) generationTokens = parsedChunk.generation_tokens;
-								if (parsedChunk.peak_memory) peakMemory = parsedChunk.peak_memory;
-
-								// Handle content chunks
-								if (parsedChunk.choices && parsedChunk.choices.length > 0) {
-									const choice = parsedChunk.choices[0];
-
-									// Handle delta chunks (streaming)
-									if (choice.delta && choice.delta.content) {
-										completeResponse += choice.delta.content;
-									}
-
-									// Handle final complete message (if present)
-									if (choice.message && choice.message.content) {
-										completeResponse = choice.message.content;
-									}
-								}
-							} catch {
-								// Log error using n8n's console (if available)
-								// if (this.helpers && this.helpers.) {
-								// 	this.helpers.log('Error parsing OpenAI streaming chunk:', e);
-								// }
-								// Continue processing other chunks
+						} else if (typeof value === 'object' && value !== null) {
+							// Already in proper format
+							properties[key] = value;
+							if (value.hasOwnProperty && !value.hasOwnProperty('required') || (value as any).required !== false) {
+								required.push(key);
 							}
 						}
 					}
 
-					// Return normalized response format
+					// Add reasoning/thought field if not present (best practice)
+					if (!properties.thought && !properties.reasoning) {
+						properties.thought = { type: 'string' };
+						required.push('thought');
+					}
+
 					return {
-						content: completeResponse,
-						output: completeResponse,
-						model: modelName,
-						usage: usageData,
-						prompt_tokens: promptTokens,
-						generation_tokens: generationTokens,
-						peak_memory: peakMemory,
+						type: 'object',
+						properties: properties,
+						required: required,
 					};
 				};
+
+
 
 				const apiProvider = this.getNodeParameter('apiProvider', i) as string || 'courier';
 				const promptType = this.getNodeParameter('promptType', i) as string;
 
 				let messages: IDataObject[] = [];
+
+				// Extract JSON schema parameter if provided
+				const jsonSchemaRaw = this.getNodeParameter('jsonSchema', i) as string;
+				let jsonSchema: any = null;
+
+				// Only process if not empty and not just an empty object
+				if (jsonSchemaRaw && typeof jsonSchemaRaw === 'string' && jsonSchemaRaw.trim() !== '' && jsonSchemaRaw.trim() !== '{}') {
+					try {
+						const parsedSchema = JSON.parse(jsonSchemaRaw);
+						jsonSchema = transformSimpleSchema(parsedSchema);
+					} catch (e) {
+						// If parsing fails, try to use it as-is (might already be an object)
+						if (typeof jsonSchemaRaw === 'object') {
+							jsonSchema = transformSimpleSchema(jsonSchemaRaw);
+						} else {
+							// Invalid JSON schema, ignore it
+							jsonSchema = null;
+						}
+					}
+				} else if (typeof jsonSchemaRaw === 'object') {
+					// Handle case where it's already an object (shouldn't happen with our UI, but be safe)
+					jsonSchema = transformSimpleSchema(jsonSchemaRaw);
+				}
 
 				if (promptType === 'messages') {
 					// Mode: Chat Messages (JSON)
@@ -332,10 +401,19 @@ export class Courier implements INodeType {
 					requestBody = {
 						model: modelData.name,
 						messages: messages,
-						temperature: 0.8,
-						stream: true,
-
+						temperature: this.getNodeParameter('temperature', i) as number,
+						stream: false,
 					};
+
+					// Add JSON schema for OpenAI format if provided
+					if (jsonSchema) {
+						requestBody.response_format = {
+							type: 'json_schema',
+							json_schema: {
+								schema: jsonSchema,
+							},
+						};
+					}
 				} else {
 					endpoint = `${baseUrl}/inference/`;
 
@@ -344,10 +422,20 @@ export class Courier implements INodeType {
 						model_name: modelData.name,
 						model_id: modelData.id,
 						model_type: modelData['type'],
-						temperature: 0.8,
+						temperature: this.getNodeParameter('temperature', i) as number,
 						messages: messages,
 						stream: false,
 					};
+
+					// Add JSON schema for Courier format if provided
+					if (jsonSchema) {
+						requestBody.response_format = {
+							type: 'json_schema',
+							json_schema: {
+								schema: jsonSchema,
+							},
+						};
+					}
 				}
 
 
@@ -385,21 +473,34 @@ export class Courier implements INodeType {
 
 						// Handle response based on API provider
 						if (apiProvider === 'openai') {
-							// Handle streaming response
-							const responseText = typeof response === 'string' ? response : JSON.stringify(response);
-							try {
-								const parsedResult = parseOpenAIStreamingResponse(responseText);
+
+								// Handle standard OpenAI response format
+								const responseData = response as IDataObject;
+								
+								// Extract content from the correct field
+								const choices = responseData.choices as IDataObject[] | undefined;
+								const firstChoice = choices && choices.length > 0 ? choices[0] : {};
+								const message = firstChoice.message as IDataObject | undefined;
+								const content = message?.content || '';
+								const modelName = responseData.model || '';
+								const usageData = responseData.usage || {};
+								const usageObj = typeof usageData === 'object' && usageData !== null ? usageData as IDataObject : {};
+								const promptTokens = usageObj.prompt_tokens || 0;
+								const completionTokens = usageObj.completion_tokens || 0;
+								
+								// Normalize response format to match Courier API structure
+								const parsedResult = {
+									content: content,
+									output: content,
+									model: modelName,
+									usage: usageData,
+									prompt_tokens: promptTokens,
+									generation_tokens: completionTokens,
+									peak_memory: 0, // Not provided by OpenAI API
+								};
 								returnData.push({
 									json: parsedResult,
 								});
-							} catch (parseError) {
-								// console.error('Failed to parse OpenAI streaming response:', parseError);
-								throw new NodeOperationError(
-									this.getNode(),
-									'Failed to parse OpenAI streaming response: ' + parseError.message,
-									{ itemIndex: i },
-								);
-							}
 						} else {
 					// Courier API response handling (existing behavior)
 					const responseData = response as IDataObject;
