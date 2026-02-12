@@ -137,11 +137,11 @@ export class Courier implements INodeType {
 				}
 			},
 			{
-				displayName: 'JSON Schema (Optional)',
+				displayName: 'Response Format (Optional)',
 				name: 'jsonSchema',
 				type: 'json',
 				default: '{}',
-				description: 'Optional JSON schema to enforce structured output. Use simple format like {"prop1": "string", "prop2": "number"} or full JSON Schema format. Leave as {} for unconstrained output.',
+				description: 'Optional response format to enforce structured JSON output using OpenAI-compatible format. Use {"type": "json_schema", "json_schema": {"schema": {...}}} or simple format like {"prop1": "string", "prop2": "number"}. Leave as {} for unconstrained output.',
 			},
 		],
 	};
