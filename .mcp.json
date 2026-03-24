@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "uce": {
+      "type": "sse",
+      "url": "https://uce.ngrok.app/mcp/sse",
+      "headers": {
+        "Authorization": "Bearer 3d562b83-cf01-4279-bf51-3ae4e682b1f9"
+      }
+    }
+  }
+}

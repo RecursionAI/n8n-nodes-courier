@@ -137,6 +137,13 @@ export class Courier implements INodeType {
 				}
 			},
 			{
+				displayName: 'Enable Web Search',
+				name: 'webSearch',
+				type: 'boolean',
+				default: false,
+				description: 'Enable web search capabilities for the model. When enabled, the model can search the web to find relevant information.',
+			},
+			{
 				displayName: 'Response Format (Optional)',
 				name: 'jsonSchema',
 				type: 'json',
@@ -449,6 +456,11 @@ export class Courier implements INodeType {
 				// if (isVisionModel && hasImages) {
 				// 	body.image_bytes = images;
 				// }
+
+				const webSearch = this.getNodeParameter('webSearch', i) as boolean;
+				if (webSearch) {
+					requestBody.tools = [{ type: 'web_search' }];
+				}
 
 				const options: IHttpRequestOptions = {
 					method: 'POST',
